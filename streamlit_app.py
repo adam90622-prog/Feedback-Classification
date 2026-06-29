@@ -133,19 +133,16 @@ def toggle_done(fb_id: int):
         st.session_state.completed.add(fb_id)
 
 def _find_related(fb_id: int, enriched: list) -> list:
-    """같은 채널 + 같은 리스크유형 + 유사 내용의 미완료 불만 목록 반환 (자신 제외)"""
+    """같은 리스크유형 + 유사 내용의 미완료 불만 목록 반환 (자신 제외, 전체 채널)"""
     import re as _re
     target = next((f for f in enriched if f["id"] == fb_id), None)
     if not target:
         return []
     risk    = target.get("리스크유형", "")
-    ch      = target.get("경로", "")
     words_t = set(_re.findall(r"[가-힣]{3,}", target.get("내용", "")))
     result  = []
     for fb in enriched:
         if fb["id"] == fb_id or fb["유형"] != "불만" or fb["id"] in st.session_state.completed:
-            continue
-        if ch and fb.get("경로", "") != ch:
             continue
         if fb.get("리스크유형", "") != risk:
             continue
@@ -264,26 +261,51 @@ if st.session_state.pending_complete is not None:
     target  = next((f for f in enriched if f["id"] == pid), None)
     if target:
         with st.container(border=True):
-            st.markdown(f"**✅ 완료 처리 확인**")
-            st.write(f"[{target.get('경로','—')}] {target['내용']}")
+            st.markdown("**✅ 완료 처리 확인**")
+            st.info(f"[{target.get('경로','—')}] {target['내용']}")
+
             if related:
-                st.warning(f"같은 채널·같은 유형의 유사 불만 **{len(related)}건**이 더 있어요. 함께 완료 처리할까요?")
+                st.markdown(f"유사 불만 **{len(related)}건** — 함께 완료 처리할 항목을 선택하세요")
+                from collections import defaultdict
+                by_ch = defaultdict(list)
                 for fb in related:
-                    st.write(f"• [{fb.get('경로','—')}] {fb['내용']}")
-                c1, c2, c3 = st.columns(3)
+                    by_ch[fb.get("경로", "—")].append(fb)
+
+                selected_ids = []
+                for ch_name, items in by_ch.items():
+                    st.markdown(f"**📌 {ch_name}**")
+                    for fb in items:
+                        if st.checkbox(
+                            f"[{fb.get('날짜','—')}] {fb['내용']}",
+                            value=True,
+                            key=f"chk_{fb['id']}",
+                        ):
+                            selected_ids.append(fb["id"])
+
+                c1, c2, c3, c4 = st.columns(4)
                 with c1:
-                    if st.button("모두 완료 처리", type="primary", use_container_width=True):
+                    if st.button("선택한 것만 완료", type="primary", use_container_width=True):
+                        st.session_state.completed.add(pid)
+                        for sid in selected_ids:
+                            st.session_state.completed.add(sid)
+                        st.session_state.pending_complete = None
+                        st.toast(f"✅ {1 + len(selected_ids)}건 완료 처리됐어요!")
+                        st.rerun()
+                with c2:
+                    if st.button("모두 완료", use_container_width=True):
                         st.session_state.completed.add(pid)
                         for fb in related:
                             st.session_state.completed.add(fb["id"])
                         st.session_state.pending_complete = None
-                        st.rerun()
-                with c2:
-                    if st.button("이 항목만 완료", use_container_width=True):
-                        st.session_state.completed.add(pid)
-                        st.session_state.pending_complete = None
+                        st.toast(f"✅ {1 + len(related)}건 완료 처리됐어요!")
                         st.rerun()
                 with c3:
+                    if st.button("이 항목만", use_container_width=True):
+                        st.session_state.completed.add(pid)
+                        st.session_state.pending_complete = None
+                        st.toast("✅ 1건 완료 처리됐어요!")
+                        st.rerun()
+                with c4:
                     if st.button("취소", use_container_width=True):
                         st.session_state.pending_complete = None
                         st.rerun()
@@ -293,6 +315,7 @@ if st.session_state.pending_complete is not None:
                     if st.button("완료 처리", type="primary", use_container_width=True):
                         st.session_state.completed.add(pid)
                         st.session_state.pending_complete = None
+                        st.toast("✅ 1건 완료 처리됐어요!")
                         st.rerun()
                 with c2:
                     if st.button("취소", use_container_width=True):
