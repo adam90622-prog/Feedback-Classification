@@ -133,23 +133,46 @@ def toggle_done(fb_id: int):
         st.session_state.completed.add(fb_id)
 
 def _find_related(fb_id: int, enriched: list) -> list:
-    """같은 리스크유형 + 유사 내용의 미완료 불만 목록 반환 (자신 제외, 전체 채널)"""
-    import re as _re
+    """TF-IDF 코사인 유사도 기반 유사 불만 탐색 (전체 채널, 미완료만)"""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
     target = next((f for f in enriched if f["id"] == fb_id), None)
     if not target:
         return []
-    risk    = target.get("리스크유형", "")
-    words_t = set(_re.findall(r"[가-힣]{3,}", target.get("내용", "")))
-    result  = []
-    for fb in enriched:
-        if fb["id"] == fb_id or fb["유형"] != "불만" or fb["id"] in st.session_state.completed:
+
+    # 불만 항목 전체로 TF-IDF 행렬 구성
+    complaints = [fb for fb in enriched if fb["유형"] == "불만"]
+    if len(complaints) < 2:
+        return []
+
+    texts      = [fb["내용"] for fb in complaints]
+    target_idx = next((i for i, fb in enumerate(complaints) if fb["id"] == fb_id), None)
+    if target_idx is None:
+        return []
+
+    # 한국어 문자 n-gram (2~3자): 어미 변화에도 유사도 잘 잡힘
+    try:
+        vec    = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 3))
+        matrix = vec.fit_transform(texts)
+    except Exception:
+        return []
+
+    sims = cosine_similarity(matrix[target_idx], matrix)[0]
+
+    THRESHOLD = 0.30
+    result = []
+    for i, fb in enumerate(complaints):
+        if fb["id"] == fb_id:
             continue
-        if fb.get("리스크유형", "") != risk:
+        if fb["id"] in st.session_state.completed:
             continue
-        words_fb = set(_re.findall(r"[가-힣]{3,}", fb.get("내용", "")))
-        if words_t & words_fb:
-            result.append(fb)
-    return result
+        if sims[i] >= THRESHOLD:
+            result.append((sims[i], fb))
+
+    # 유사도 높은 순 정렬
+    result.sort(key=lambda x: -x[0])
+    return [fb for _, fb in result]
 
 RANK_ICON  = ["🥇","🥈","🥉"]
 RANK_CLASS = ["active-card-1","active-card-2","active-card-3"]
