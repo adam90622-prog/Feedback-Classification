@@ -51,13 +51,15 @@ st.markdown("""
 # ── 세션 상태 초기화 ──────────────────────────────────────────────
 
 if "completed" not in st.session_state:
-    st.session_state.completed = set()   # 완료된 피드백 id 집합
+    st.session_state.completed = set()
 if "enriched" not in st.session_state:
     st.session_state.enriched  = None
 if "mode" not in st.session_state:
     st.session_state.mode      = ""
 if "last_file" not in st.session_state:
     st.session_state.last_file = ""
+if "pending_complete" not in st.session_state:
+    st.session_state.pending_complete = None  # 확인 대기 중인 fb_id
 
 # ── 컬럼 자동 감지 ────────────────────────────────────────────────
 
@@ -151,34 +153,6 @@ def _find_related(fb_id: int, enriched: list) -> list:
         if words_t & words_fb:
             result.append(fb)
     return result
-
-@st.dialog("완료 처리 확인")
-def _complete_dialog(fb_id: int, enriched: list):
-    target  = next((f for f in enriched if f["id"] == fb_id), None)
-    related = _find_related(fb_id, enriched)
-
-    st.markdown(f"**완료 처리할 항목**")
-    st.info(f"[{target.get('경로','—')}] {target['내용']}")
-
-    if related:
-        st.markdown(f"**같은 채널·같은 유형의 유사 불만 {len(related)}건**이 있어요. 함께 처리할까요?")
-        for fb in related:
-            st.write(f"• [{fb.get('경로','—')}] {fb['내용']}")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("모두 완료 처리", type="primary", use_container_width=True):
-                st.session_state.completed.add(fb_id)
-                for fb in related:
-                    st.session_state.completed.add(fb["id"])
-                st.rerun()
-        with c2:
-            if st.button("이 항목만 완료", use_container_width=True):
-                st.session_state.completed.add(fb_id)
-                st.rerun()
-    else:
-        if st.button("완료 처리", type="primary", use_container_width=True):
-            st.session_state.completed.add(fb_id)
-            st.rerun()
 
 RANK_ICON  = ["🥇","🥈","🥉"]
 RANK_CLASS = ["active-card-1","active-card-2","active-card-3"]
@@ -282,6 +256,49 @@ completed = st.session_state.completed
 
 st.title("☕ 고객 피드백 대시보드")
 st.caption(f"총 {len(enriched)}건 · 완료 {len(completed)}건 / 미완료 {len(enriched)-len(completed)}건")
+
+# ── 완료 처리 확인창 ──────────────────────────────────────────────
+if st.session_state.pending_complete is not None:
+    pid     = st.session_state.pending_complete
+    related = _find_related(pid, enriched)
+    target  = next((f for f in enriched if f["id"] == pid), None)
+    if target:
+        with st.container(border=True):
+            st.markdown(f"**✅ 완료 처리 확인**")
+            st.write(f"[{target.get('경로','—')}] {target['내용']}")
+            if related:
+                st.warning(f"같은 채널·같은 유형의 유사 불만 **{len(related)}건**이 더 있어요. 함께 완료 처리할까요?")
+                for fb in related:
+                    st.write(f"• [{fb.get('경로','—')}] {fb['내용']}")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    if st.button("모두 완료 처리", type="primary", use_container_width=True):
+                        st.session_state.completed.add(pid)
+                        for fb in related:
+                            st.session_state.completed.add(fb["id"])
+                        st.session_state.pending_complete = None
+                        st.rerun()
+                with c2:
+                    if st.button("이 항목만 완료", use_container_width=True):
+                        st.session_state.completed.add(pid)
+                        st.session_state.pending_complete = None
+                        st.rerun()
+                with c3:
+                    if st.button("취소", use_container_width=True):
+                        st.session_state.pending_complete = None
+                        st.rerun()
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("완료 처리", type="primary", use_container_width=True):
+                        st.session_state.completed.add(pid)
+                        st.session_state.pending_complete = None
+                        st.rerun()
+                with c2:
+                    if st.button("취소", use_container_width=True):
+                        st.session_state.pending_complete = None
+                        st.rerun()
+
 st.divider()
 
 # ════════════════════════════════
@@ -330,7 +347,7 @@ else:
             with col_btn:
                 st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
                 if st.button("✅ 완료 처리", key=f"top3_done_{fb['id']}", use_container_width=True):
-                    _complete_dialog(fb["id"], enriched)
+                    st.session_state.pending_complete = fb["id"]
                     st.rerun()
     else:
         st.success("🎉 급한 불만을 모두 처리했어요!")
@@ -456,5 +473,5 @@ else:
                 st.rerun()
         else:
             if row_cols[7].button("✅ 완료 처리", key=f"tbl_done_{fb['id']}", use_container_width=True):
-                _complete_dialog(fb["id"], enriched)
+                st.session_state.pending_complete = fb["id"]
                 st.rerun()
