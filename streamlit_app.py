@@ -130,6 +130,22 @@ def toggle_done(fb_id: int):
     else:
         st.session_state.completed.add(fb_id)
 
+def complete_with_related(fb_id: int, enriched: list):
+    """완료 처리 시 같은 채널 + 같은 리스크유형의 불만을 일괄 완료"""
+    target = next((f for f in enriched if f["id"] == fb_id), None)
+    if not target:
+        st.session_state.completed.add(fb_id)
+        return
+    risk  = target.get("리스크유형", "")
+    ch    = target.get("경로", "")
+    for fb in enriched:
+        if fb["유형"] != "불만":
+            continue
+        same_risk = fb.get("리스크유형", "") == risk
+        same_ch   = ch and fb.get("경로", "") == ch
+        if fb["id"] == fb_id or (same_risk and same_ch):
+            st.session_state.completed.add(fb["id"])
+
 RANK_ICON  = ["🥇","🥈","🥉"]
 RANK_CLASS = ["active-card-1","active-card-2","active-card-3"]
 
@@ -280,7 +296,7 @@ else:
             with col_btn:
                 st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
                 if st.button("✅ 완료 처리", key=f"top3_done_{fb['id']}", use_container_width=True):
-                    toggle_done(fb["id"])
+                    complete_with_related(fb["id"], enriched)
                     st.rerun()
     else:
         st.success("🎉 급한 불만을 모두 처리했어요!")
@@ -406,5 +422,5 @@ else:
                 st.rerun()
         else:
             if row_cols[7].button("✅ 완료 처리", key=f"tbl_done_{fb['id']}", use_container_width=True):
-                toggle_done(fb["id"])
+                complete_with_related(fb["id"], enriched)
                 st.rerun()

@@ -28,17 +28,10 @@ SECONDARY_CONFIG = {
     "법적조치": {"score": 2, "label": "⚖️ 법적조치"},
 }
 
-STAR_BONUS = {1: 2, 2: 1, 3: 0}
-
-
-def _compute_score(risk_type: str, secondary: list, star) -> int:
+def _compute_score(risk_type: str, secondary: list) -> int:
     base  = RISK_CONFIG.get(risk_type, RISK_CONFIG["일반불편"])["score"]
     bonus = sum(SECONDARY_CONFIG[s]["score"] for s in secondary if s in SECONDARY_CONFIG)
-    try:
-        star_b = STAR_BONUS.get(int(float(star)), 0) if star not in (None, "") else 0
-    except (ValueError, TypeError):
-        star_b = 0
-    return base + bonus + star_b
+    return base + bonus
 
 
 # ── LLM 분류 ─────────────────────────────────────────────────────
@@ -178,7 +171,7 @@ def classify_with_rules(feedbacks: list[dict]) -> dict:
                 label = "문의"
             risk_type, secondary, reason = "", [], ""
 
-        score = _compute_score(risk_type, secondary, star) if label == "불만" else 0
+        score = _compute_score(risk_type, secondary) if label == "불만" else 0
         results[str(fb["id"])] = {
             "id": fb["id"],
             "유형": label,
@@ -223,7 +216,6 @@ def classify(feedbacks: list[dict], api_key: str = "") -> tuple[list[dict], str]
                 raw["긴급도"] = _compute_score(
                     raw.get("리스크유형", "일반불편"),
                     raw.get("2차피해유형", []),
-                    star,
                 )
             else:
                 raw["긴급도"] = 0
