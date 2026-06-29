@@ -130,20 +130,29 @@ def toggle_done(fb_id: int):
     else:
         st.session_state.completed.add(fb_id)
 
+def _content_similar(text1: str, text2: str) -> bool:
+    """3글자 이상 한글 단어가 1개 이상 겹치면 같은 불만으로 간주"""
+    import re as _re
+    words1 = set(_re.findall(r"[가-힣]{3,}", text1))
+    words2 = set(_re.findall(r"[가-힣]{3,}", text2))
+    return bool(words1 & words2)
+
 def complete_with_related(fb_id: int, enriched: list):
-    """완료 처리 시 같은 채널 + 같은 리스크유형의 불만을 일괄 완료"""
+    """완료 처리 시 같은 채널 + 같은 리스크유형 + 유사 내용의 불만만 일괄 완료"""
     target = next((f for f in enriched if f["id"] == fb_id), None)
     if not target:
         st.session_state.completed.add(fb_id)
         return
-    risk  = target.get("리스크유형", "")
-    ch    = target.get("경로", "")
+    risk    = target.get("리스크유형", "")
+    ch      = target.get("경로", "")
+    content = target.get("내용", "")
     for fb in enriched:
         if fb["유형"] != "불만":
             continue
-        same_risk = fb.get("리스크유형", "") == risk
         same_ch   = ch and fb.get("경로", "") == ch
-        if fb["id"] == fb_id or (same_risk and same_ch):
+        same_risk = fb.get("리스크유형", "") == risk
+        similar   = _content_similar(content, fb.get("내용", ""))
+        if fb["id"] == fb_id or (same_ch and same_risk and similar):
             st.session_state.completed.add(fb["id"])
 
 RANK_ICON  = ["🥇","🥈","🥉"]
