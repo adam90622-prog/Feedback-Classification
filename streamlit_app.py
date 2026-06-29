@@ -161,7 +161,14 @@ with st.sidebar:
         value=default_key,
         type="password",
         placeholder="sk-ant-...  (없으면 룰기반 분류)",
-        help="입력하면 Claude Haiku가 직접 분류해요. 비워두면 키워드 룰로 분류합니다.",
+    )
+    st.caption(
+        "🔑 **본인의 Anthropic API Key를 입력하세요.**\n\n"
+        "- 입력 시: Claude AI가 직접 분류 (더 정확)\n"
+        "- 비워두면: 키워드 룰기반 분류 (무료)\n\n"
+        "⚠️ 타인의 키를 입력하거나 공유하지 마세요. "
+        "API 사용 비용은 키 소유자에게 청구됩니다.\n\n"
+        "[키 발급 받기 →](https://console.anthropic.com/)"
     )
 
     st.divider()
