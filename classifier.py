@@ -61,7 +61,7 @@ def _build_user_prompt(feedbacks: list[dict]) -> str:
 {chr(10).join(lines)}
 
 분류 규칙:
-1. 별점이 3점 이하이거나 내용이 부정적이면 유형을 "불만"으로 분류.
+1. 내용이 부정적이거나 문제를 호소하면 별점 유무와 관계없이 "불만"으로 분류. 별점은 점수 보조용으로만 참고.
 2. 불만이면 아래 리스크 유형 중 가장 심각한 하나를 선택.
 3. 실제로 피해가 발생한 경우에만 2차피해유형에 포함 (발생 가능성이 아닌 실제 발생).
 
@@ -121,7 +121,11 @@ SECONDARY_PATTERNS = [
     ("법적조치", r"고소|신고|법적.*조치|변호사|소비자원|언론.*제보"),
 ]
 
-NEGATIVE_PATTERNS = r"오류|에러|안 돼|안돼|불편|불만|느려|늦|오래|좁|끊겨|식었|잘못|못 받|틀렸|피해|환불|결제.*안|포인트.*안|별로|최악|실망|화가|짜증"
+NEGATIVE_PATTERNS = (
+    r"오류|에러|실패|안 돼|안돼|안됩|안되|불편|불만|느려|늦|오래|좁|끊겨|식었"
+    r"|잘못|못 받|틀렸|피해|환불|결제.*안|결제.*실패|포인트.*안|별로|최악|실망"
+    r"|화가|짜증|문제|고장|먹통|작동.*안|되질|안 되|불량|항의|다시.*안|또.*안"
+)
 
 def _rule_risk_type(text: str) -> str:
     for risk_type, pattern in RISK_PATTERNS:
@@ -137,12 +141,16 @@ def _rule_secondary(text: str) -> list:
     return result
 
 def _is_negative(text: str, star) -> bool:
+    # 내용 기준 우선 판단
+    if re.search(NEGATIVE_PATTERNS, text):
+        return True
+    # 내용으로 판단 안 되면 별점 보조 활용
     try:
         if star not in (None, "") and int(float(star)) <= 3:
             return True
     except (ValueError, TypeError):
         pass
-    return bool(re.search(NEGATIVE_PATTERNS, text))
+    return False
 
 def classify_with_rules(feedbacks: list[dict]) -> dict:
     results = {}
